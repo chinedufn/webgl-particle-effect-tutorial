@@ -1,3 +1,5 @@
+var glMat4 = require('gl-mat4')
+
 // TODO: Make a particle texture atlas in photoshop
 // TODO: Particle effect tutorial lit tweet w/ gif of fire
 // TODO: In the article comment that you might use a post processing effect such as bloom on your fire
@@ -20,8 +22,8 @@ attribute vec2 aTextureCoords;
 attribute vec2 aTriCorner;
 attribute vec3 aCenterOffset;
 attribute vec3 aVelocity;
-
 uniform mat4 uPMatrix;
+uniform mat4 uViewMatrix;
 
 varying float vLifetime;
 varying vec2 vTextureCoords;
@@ -40,9 +42,7 @@ void main (void) {
   float size = (vLifetime * vLifetime) * 0.05;
 
   position.xy += aTriCorner.xy * size;
-
-  position.z = -0.1;
-  gl_Position = position;
+  gl_Position = uPMatrix * uViewMatrix * position;
 
   vTextureCoords = aTextureCoords;
   vLifetime = aLifetime;
@@ -112,6 +112,7 @@ var timeUniFrag = gl.getUniformLocation(shaderProgram, 'uTimeFrag')
 var startPosUni = gl.getUniformLocation(shaderProgram, 'uStartPos')
 var accelerationUni = gl.getUniformLocation(shaderProgram, 'uAcceleration')
 var perspectiveUni = gl.getUniformLocation(shaderProgram, 'uPMatrix')
+var viewUni = gl.getUniformLocation(shaderProgram, 'uViewMatrix')
 var colorUni = gl.getUniformLocation(shaderProgram, 'uColor')
 var fireAtlasUni = gl.getUniformLocation(shaderProgram, 'uFireAtlas')
 
@@ -129,7 +130,7 @@ fireAtlas.onload = function () {
 }
 fireAtlas.src = 'fire-texture-atlas.jpg'
 
-var numParticles = 500
+var numParticles = 1000
 var lifetimes = []
 var triCorners = []
 var texCoords = []
@@ -166,6 +167,7 @@ for (var i = 0; i < numParticles; i++) {
   if (xStartOffset > 0) {
     sideVelocity *= -1
   }
+  sideVelocity = 0
 
   for (var j = 0; j < 4; j++) {
     lifetimes.push(lifetime)
@@ -221,13 +223,37 @@ gl.uniform1i(fireAtlasUni, 0)
 gl.uniform1f(timeUni, 0.1)
 gl.uniform1f(timeUniFrag, 0.1)
 
-gl.uniform3fv(startPosUni, [0.0, 0.0, 0.0])
+var startFirePos = [0.0, 0.0, 0.0]
+gl.uniform3fv(startPosUni, startFirePos)
 gl.uniform3fv(accelerationUni, [1.0, 1.0, 1.0])
-gl.uniform4fv(colorUni, [1.0, 1.0, 1.0, 1.0])
-gl.uniformMatrix4fv(perspectiveUni, false, [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+gl.uniform4fv(colorUni, [0.8, 0.25, 0.25, 1.0])
+gl.uniformMatrix4fv(perspectiveUni, false, glMat4.perspective([], Math.PI / 3, 1, 0.01, 1000))
 
+/**
+ * Camera
+ */
+var camera = glMat4.create()
+glMat4.translate(camera, camera, [0, 2, 1])
+
+var cameraPos = [
+  camera[12],
+  camera[13],
+  camera[14]
+]
+
+glMat4.lookAt(camera, cameraPos, startFirePos, [0, 1, 0])
+
+gl.uniformMatrix4fv(viewUni, false, camera)
+
+/**
+ * Draw
+ */
 var previousTime = new Date().getTime()
-var clockTime = 0
+// Start a bit into the simulation so that we skip the wall of fire
+// that forms at the beginning. To see what I mean set this value to
+// zero
+var clockTime = 3
+
 function draw () {
   if (imageIsLoaded) {
     // TODO: What does this do?

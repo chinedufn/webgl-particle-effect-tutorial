@@ -1,0 +1,36 @@
+{
+  "name": "webgl-particle-effect-tutorial",
+  "version": "0.0.1",
+  "description": "A tutorial for creating a WebGL fire particle effect",
+  "main": "tutorial.js",
+  "scripts": {
+    "test": "standard"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chinedufn/webgl-particle-effect-tutorial.git"
+  },
+  "keywords": [
+    "webgl",
+    "particle",
+    "effect",
+    "fire",
+    "billboard",
+    "quad",
+    "opengl",
+    "flame",
+    "tutorial"
+  ],
+  "author": "Chinedu Francis Nwafili <frankie.nwafili@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/chinedufn/webgl-particle-effect-tutorial/issues"
+  },
+  "homepage": "https://github.com/chinedufn/webgl-particle-effect-tutorial#readme",
+  "dependencies": {
+    "gl-mat4": "^1.1.4"
+  },
+  "devDependencies": {
+    "standard": "^10.0.2"
+  }
+}

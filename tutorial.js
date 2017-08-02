@@ -34,13 +34,10 @@ void main (void) {
   position.w = 1.0;
   position.xyz += aCenterOffset;
 
-  vLifetime = 1.3 - (uTime / aLifetime);
+  vLifetime = 1.3 - (time / aLifetime);
   vLifetime = clamp(vLifetime, 0.0, 1.0);
 
-  float size = (vLifetime * vLifetime) * 0.1;
-  if (uTime > aLifetime) {
-    size = 0.1;
-  }
+  float size = (vLifetime * vLifetime) * 0.05;
 
   position.xy += aTriCorner.xy * size;
 
@@ -132,7 +129,7 @@ fireAtlas.onload = function () {
 }
 fireAtlas.src = 'fire-texture-atlas.jpg'
 
-var numParticles = 100
+var numParticles = 500
 var lifetimes = []
 var triCorners = []
 var texCoords = []
@@ -153,17 +150,22 @@ var texCoordsCycle = [
 ]
 
 for (var i = 0; i < numParticles; i++) {
-  var lifetime = 10 * Math.random()
+  var lifetime = 8 * Math.random()
 
   var diameterAroundCenter = 0.5
   var halfDiameterAroundCenter = diameterAroundCenter / 2
 
   var xStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
+  xStartOffset /= 3
   var yStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
   yStartOffset /= 10
   var zStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
 
   var upVelocity = 0.1 * Math.random()
+  var sideVelocity = 0.02 * Math.random()
+  if (xStartOffset > 0) {
+    sideVelocity *= -1
+  }
 
   for (var j = 0; j < 4; j++) {
     lifetimes.push(lifetime)
@@ -172,9 +174,9 @@ for (var i = 0; i < numParticles; i++) {
     texCoords.push(texCoordsCycle[j * 2])
     texCoords.push(texCoordsCycle[j * 2 + 1])
     centerOffsets.push(xStartOffset)
-    centerOffsets.push(yStartOffset)
+    centerOffsets.push(yStartOffset + Math.abs(xStartOffset / 2.0))
     centerOffsets.push(zStartOffset)
-    velocities.push(0.0)
+    velocities.push(sideVelocity)
     velocities.push(upVelocity)
     velocities.push(0.0)
   }

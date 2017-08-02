@@ -14,13 +14,12 @@ gl.viewport(0, 0, 500, 500)
 var vertexGLSL = `
 uniform float uTime;
 uniform vec3 uStartPos;
-uniform vec3 uVelocity;
-uniform vec3 uAcceleration;
 
 attribute float aLifetime;
 attribute vec2 aTextureCoords;
 attribute vec2 aTriCorner;
 attribute vec3 aCenterOffset;
+attribute vec3 aVelocity;
 
 uniform mat4 uPMatrix;
 
@@ -29,23 +28,25 @@ varying vec2 vTextureCoords;
 
 void main (void) {
   vec4 position;
-  if (uTime < aLifetime) {
-    position.xyz = uStartPos + (uTime * uVelocity);
-    position.w = 1.0;
-  } else {
-    position = vec4(-1000, -1000, 0, 0);
-  }
+  float time = mod(uTime, aLifetime);
+
+  position.xyz = uStartPos + (time * aVelocity);
+  position.w = 1.0;
   position.xyz += aCenterOffset;
 
   vLifetime = 1.3 - (uTime / aLifetime);
   vLifetime = clamp(vLifetime, 0.0, 1.0);
 
   float size = (vLifetime * vLifetime) * 0.1;
+  if (uTime > aLifetime) {
+    size = 0.1;
+  }
+
   position.xy += aTriCorner.xy * size;
 
-  // position.xy += aTriCorner.xy * 0.3;
   position.z = -0.1;
   gl_Position = position;
+
   vTextureCoords = aTextureCoords;
   vLifetime = aLifetime;
 }
@@ -65,17 +66,20 @@ varying vec2 vTextureCoords;
 uniform sampler2D fireAtlas;
 
 void main (void) {
-  float percentOfLife = uTimeFrag / vLifetime;
+  float time = mod(uTimeFrag, vLifetime);
+
+  float percentOfLife = time / vLifetime;
   percentOfLife = clamp(percentOfLife, 0.0, 1.0);
   float offset = floor(16.0 * percentOfLife);
   // float offset = 16.0;
   float offsetX = floor(mod(offset, 4.0)) / 4.0;
   float offsetY = 0.75 - floor(offset / 4.0) / 4.0;
 
- // vec4 texColor = texture2D(fireAtlas, vTextureCoords);
- vec4 texColor = texture2D(fireAtlas, vec2((vTextureCoords.x / 4.0) + offsetX, (vTextureCoords.y / 4.0) + offsetY));
- gl_FragColor = uColor * texColor;
- // gl_FragColor.a *= vLifetime;
+  // vec4 texColor = texture2D(fireAtlas, vTextureCoords);
+  vec4 texColor = texture2D(fireAtlas, vec2((vTextureCoords.x / 4.0) + offsetX, (vTextureCoords.y / 4.0) + offsetY));
+  gl_FragColor = uColor * texColor;
+
+  gl_FragColor.a *= vLifetime;
 }
 `
 
@@ -99,15 +103,16 @@ var lifetimeAttrib = gl.getAttribLocation(shaderProgram, 'aLifetime')
 var texCoordAttrib = gl.getAttribLocation(shaderProgram, 'aTextureCoords')
 var triCornerAttrib = gl.getAttribLocation(shaderProgram, 'aTriCorner')
 var centerOffsetAttrib = gl.getAttribLocation(shaderProgram, 'aCenterOffset')
+var velocityAttrib = gl.getAttribLocation(shaderProgram, 'aVelocity')
 gl.enableVertexAttribArray(lifetimeAttrib)
 gl.enableVertexAttribArray(texCoordAttrib)
 gl.enableVertexAttribArray(triCornerAttrib)
 gl.enableVertexAttribArray(centerOffsetAttrib)
+gl.enableVertexAttribArray(velocityAttrib)
 
 var timeUni = gl.getUniformLocation(shaderProgram, 'uTime')
 var timeUniFrag = gl.getUniformLocation(shaderProgram, 'uTimeFrag')
 var startPosUni = gl.getUniformLocation(shaderProgram, 'uStartPos')
-var velocityUni = gl.getUniformLocation(shaderProgram, 'uVelocity')
 var accelerationUni = gl.getUniformLocation(shaderProgram, 'uAcceleration')
 var perspectiveUni = gl.getUniformLocation(shaderProgram, 'uPMatrix')
 var colorUni = gl.getUniformLocation(shaderProgram, 'uColor')
@@ -133,6 +138,7 @@ var triCorners = []
 var texCoords = []
 var vertexIndices = []
 var centerOffsets = []
+var velocities = []
 var triCornersCycle = [
   -1.0, -1.0,
   1.0, -1.0,
@@ -154,7 +160,10 @@ for (var i = 0; i < numParticles; i++) {
 
   var xStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
   var yStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
+  yStartOffset /= 10
   var zStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
+
+  var upVelocity = 0.1 * Math.random()
 
   for (var j = 0; j < 4; j++) {
     lifetimes.push(lifetime)
@@ -165,6 +174,9 @@ for (var i = 0; i < numParticles; i++) {
     centerOffsets.push(xStartOffset)
     centerOffsets.push(yStartOffset)
     centerOffsets.push(zStartOffset)
+    velocities.push(0.0)
+    velocities.push(upVelocity)
+    velocities.push(0.0)
   }
 
   vertexIndices = vertexIndices.concat([
@@ -183,6 +195,9 @@ gl.vertexAttribPointer(triCornerAttrib, 2, gl.FLOAT, false, 0, 0)
 
 var centerOffsetBuffer = createBuffer('ARRAY_BUFFER', Float32Array, centerOffsets)
 gl.vertexAttribPointer(centerOffsetAttrib, 3, gl.FLOAT, false, 0, 0)
+
+var velocityBuffer = createBuffer('ARRAY_BUFFER', Float32Array, velocities)
+gl.vertexAttribPointer(velocityAttrib, 3, gl.FLOAT, false, 0, 0)
 
 var vertexIndexBuffer = createBuffer('ELEMENT_ARRAY_BUFFER', Uint16Array, vertexIndices)
 
@@ -205,7 +220,6 @@ gl.uniform1f(timeUni, 0.1)
 gl.uniform1f(timeUniFrag, 0.1)
 
 gl.uniform3fv(startPosUni, [0.0, 0.0, 0.0])
-gl.uniform3fv(velocityUni, [0.0, 0.1, 0.0])
 gl.uniform3fv(accelerationUni, [1.0, 1.0, 1.0])
 gl.uniform4fv(colorUni, [1.0, 1.0, 1.0, 1.0])
 gl.uniformMatrix4fv(perspectiveUni, false, [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0])
@@ -221,8 +235,8 @@ function draw () {
     clockTime += (currentTime - previousTime) / 1000
     previousTime = currentTime
 
-    gl.uniform1f(timeUni, clockTime % 10)
-    gl.uniform1f(timeUniFrag, clockTime % 10)
+    gl.uniform1f(timeUni, clockTime)
+    gl.uniform1f(timeUniFrag, clockTime)
 
     gl.drawElements(gl.TRIANGLES, numParticles * 6, gl.UNSIGNED_SHORT, 0)
   }

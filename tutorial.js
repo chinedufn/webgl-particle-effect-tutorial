@@ -24,7 +24,7 @@ attribute vec2 aTriCorner;
 attribute vec3 aCenterOffset;
 attribute vec3 aVelocity;
 uniform mat4 uPMatrix;
-uniform mat4 uBillboard;
+uniform mat4 uViewMatrix;
 
 varying float vLifetime;
 varying vec2 vTextureCoords;
@@ -42,8 +42,11 @@ void main (void) {
 
   float size = (vLifetime * vLifetime) * 0.05;
 
-  position.xy += aTriCorner.xy * size;
-  gl_Position = uPMatrix * uBillboard * position;
+  vec3 cameraRight = vec3(uViewMatrix[0].x, uViewMatrix[1].x, uViewMatrix[2].x);
+  vec3 cameraUp = vec3(uViewMatrix[0].y, uViewMatrix[1].y, uViewMatrix[2].y);
+
+  position.xyz += (cameraRight * aTriCorner.x * size) + (cameraUp * aTriCorner.y * size);
+  gl_Position = uPMatrix * uViewMatrix * position;
 
   vTextureCoords = aTextureCoords;
   vLifetime = aLifetime;
@@ -116,7 +119,6 @@ var perspectiveUni = gl.getUniformLocation(shaderProgram, 'uPMatrix')
 var viewUni = gl.getUniformLocation(shaderProgram, 'uViewMatrix')
 var colorUni = gl.getUniformLocation(shaderProgram, 'uColor')
 var fireAtlasUni = gl.getUniformLocation(shaderProgram, 'uFireAtlas')
-var billboardUni = gl.getUniformLocation(shaderProgram, 'uBillboard')
 
 var imageIsLoaded = false
 var fireTexture = gl.createTexture()
@@ -163,13 +165,19 @@ for (var i = 0; i < numParticles; i++) {
   var yStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
   yStartOffset /= 10
   var zStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
+  zStartOffset /= 3
 
   var upVelocity = 0.1 * Math.random()
-  var sideVelocity = 0.02 * Math.random()
+
+  var xSideVelocity = 0.02 * Math.random()
   if (xStartOffset > 0) {
-    sideVelocity *= -1
+    xSideVelocity *= -1
   }
-  sideVelocity = 0
+
+  var zSideVelocity = 0.02 * Math.random()
+  if (zStartOffset > 0) {
+    zSideVelocity *= -1
+  }
 
   for (var j = 0; j < 4; j++) {
     lifetimes.push(lifetime)
@@ -180,9 +188,9 @@ for (var i = 0; i < numParticles; i++) {
     centerOffsets.push(xStartOffset)
     centerOffsets.push(yStartOffset + Math.abs(xStartOffset / 2.0))
     centerOffsets.push(zStartOffset)
-    velocities.push(sideVelocity)
+    velocities.push(xSideVelocity)
     velocities.push(upVelocity)
-    velocities.push(0.0)
+    velocities.push(zSideVelocity)
   }
 
   vertexIndices = vertexIndices.concat([
@@ -234,29 +242,23 @@ gl.uniformMatrix4fv(perspectiveUni, false, glMat4.perspective([], Math.PI / 3, 1
 /**
  * Camera
  */
-var camera = glMat4.create()
-glMat4.translate(camera, camera, [0, 1, 1])
 
-var cameraPos = [
-  camera[12],
-  camera[13],
-  camera[14]
-]
+var xRotation = 0
+function createCamera () {
+  var camera = glMat4.create()
+  glMat4.rotateY(camera, camera, xRotation)
+  glMat4.translate(camera, camera, [0, 0, 1])
 
-glMat4.lookAt(camera, cameraPos, startFirePos, [0, 1, 0])
+  var cameraPos = [
+    camera[12],
+    camera[13],
+    camera[14]
+  ]
 
-// https://swiftcoder.wordpress.com/2008/11/25/constructing-a-billboard-matrix/
-var cameraRotation = glMat3.fromMat4([], camera)
-glMat3.transpose(cameraRotation, cameraRotation)
-var cameraInverse = [
-  cameraRotation[0], cameraRotation[1], cameraRotation[2], 0,
-  cameraRotation[3], cameraRotation[4], cameraRotation[5], 0,
-  cameraRotation[6], cameraRotation[7], cameraRotation[8], 0,
-  0, 0, 0, 1
-]
+  glMat4.lookAt(camera, cameraPos, startFirePos, [0, 1, 0])
 
-glMat4.multiply(camera, camera, cameraInverse)
-gl.uniformMatrix4fv(billboardUni, false, camera)
+  return camera
+}
 
 /**
  * Draw
@@ -276,8 +278,11 @@ function draw () {
     clockTime += (currentTime - previousTime) / 1000
     previousTime = currentTime
 
+    xRotation = clockTime / 2
+
     gl.uniform1f(timeUni, clockTime)
     gl.uniform1f(timeUniFrag, clockTime)
+    gl.uniformMatrix4fv(viewUni, false, createCamera())
 
     gl.drawElements(gl.TRIANGLES, numParticles * 6, gl.UNSIGNED_SHORT, 0)
   }

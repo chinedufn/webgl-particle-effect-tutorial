@@ -1,5 +1,4 @@
 var glMat4 = require('gl-mat4')
-var glMat3 = require('gl-mat3')
 
 // TODO: Make a particle texture atlas in photoshop
 // TODO: Particle effect tutorial lit tweet w/ gif of fire
@@ -114,7 +113,6 @@ gl.enableVertexAttribArray(velocityAttrib)
 var timeUni = gl.getUniformLocation(shaderProgram, 'uTime')
 var timeUniFrag = gl.getUniformLocation(shaderProgram, 'uTimeFrag')
 var startPosUni = gl.getUniformLocation(shaderProgram, 'uStartPos')
-var accelerationUni = gl.getUniformLocation(shaderProgram, 'uAcceleration')
 var perspectiveUni = gl.getUniformLocation(shaderProgram, 'uPMatrix')
 var viewUni = gl.getUniformLocation(shaderProgram, 'uViewMatrix')
 var colorUni = gl.getUniformLocation(shaderProgram, 'uColor')
@@ -233,10 +231,6 @@ gl.uniform1i(fireAtlasUni, 0)
 gl.uniform1f(timeUni, 0.1)
 gl.uniform1f(timeUniFrag, 0.1)
 
-var startFirePos = [0.0, 0.0, 0.0]
-gl.uniform3fv(startPosUni, startFirePos)
-gl.uniform3fv(accelerationUni, [1.0, 1.0, 1.0])
-gl.uniform4fv(colorUni, [0.8, 0.25, 0.25, 1.0])
 gl.uniformMatrix4fv(perspectiveUni, false, glMat4.perspective([], Math.PI / 3, 1, 0.01, 1000))
 
 /**
@@ -244,10 +238,19 @@ gl.uniformMatrix4fv(perspectiveUni, false, glMat4.perspective([], Math.PI / 3, 1
  */
 
 var xRotation = 0
+var yRotation = 0
 function createCamera () {
   var camera = glMat4.create()
-  glMat4.rotateY(camera, camera, xRotation)
-  glMat4.translate(camera, camera, [0, 0, 1])
+  glMat4.translate(camera, camera, [0, 0.25, 1.5])
+
+  var xAxisRotation = glMat4.create()
+  var yAxisRotation = glMat4.create()
+
+  glMat4.rotateX(xAxisRotation, xAxisRotation, -xRotation)
+  glMat4.rotateY(yAxisRotation, yAxisRotation, yRotation)
+
+  glMat4.multiply(camera, xAxisRotation, camera)
+  glMat4.multiply(camera, yAxisRotation, camera)
 
   var cameraPos = [
     camera[12],
@@ -255,7 +258,7 @@ function createCamera () {
     camera[14]
   ]
 
-  glMat4.lookAt(camera, cameraPos, startFirePos, [0, 1, 0])
+  glMat4.lookAt(camera, cameraPos, firePos1, [0, 1, 0])
 
   return camera
 }
@@ -269,6 +272,12 @@ var previousTime = new Date().getTime()
 // zero
 var clockTime = 3
 
+var fireColor1 = [0.8, 0.25, 0.25, 1.0]
+var fireColor2 = [0.25, 0.25, 8.25, 1.0]
+
+var firePos1 = [0.0, 0.0, 0.0]
+var firePos2 = [0.5, 0.0, 0.0]
+
 function draw () {
   if (imageIsLoaded) {
     // TODO: What does this do?
@@ -278,15 +287,63 @@ function draw () {
     clockTime += (currentTime - previousTime) / 1000
     previousTime = currentTime
 
-    xRotation = clockTime / 2
-
     gl.uniform1f(timeUni, clockTime)
     gl.uniform1f(timeUniFrag, clockTime)
+
     gl.uniformMatrix4fv(viewUni, false, createCamera())
 
+    gl.uniform3fv(startPosUni, firePos1)
+    gl.uniform4fv(colorUni, fireColor1)
+
+    gl.drawElements(gl.TRIANGLES, numParticles * 6, gl.UNSIGNED_SHORT, 0)
+
+    gl.uniform3fv(startPosUni, firePos2)
+    gl.uniform4fv(colorUni, fireColor2)
     gl.drawElements(gl.TRIANGLES, numParticles * 6, gl.UNSIGNED_SHORT, 0)
   }
 
   window.requestAnimationFrame(draw)
 }
 draw()
+
+/**
+ * Canvas mouse / touch movement controls
+ */
+
+var isDragging = false
+var lastMouseX = 0
+var lastMouseY = 0
+canvas.onmousedown = function (e) {
+  isDragging = true
+  lastMouseX = e.pageX
+  lastMouseY = e.pageY
+}
+canvas.onmousemove = function (e) {
+  if (isDragging) {
+    xRotation += (e.pageY - lastMouseY) / 50
+    yRotation -= (e.pageX - lastMouseX) / 50
+
+    xRotation = Math.min(xRotation, Math.PI / 2.5)
+    xRotation = Math.max(xRotation, -Math.PI / 2.5)
+
+    lastMouseX = e.pageX
+    lastMouseY = e.pageY
+  }
+}
+canvas.onmouseup = function (e) {
+  isDragging = false
+}
+canvas.addEventListener('touchstart', function (e) {
+  lastMouseX = e.touches[0].clientX
+  lastMouseY = e.touches[0].clientY
+})
+canvas.addEventListener('touchmove', function (e) {
+  xRotation += (e.touches[0].clientY - lastMouseY) / 50
+  yRotation -= (e.touches[0].clientX - lastMouseX) / 50
+
+  xRotation = Math.min(xRotation, Math.PI / 2.5)
+  xRotation = Math.max(xRotation, -Math.PI / 2.5)
+
+  lastMouseX = e.touches[0].clientX
+  lastMouseY = e.touches[0].clientY
+})

@@ -145,23 +145,31 @@ void main (void) {
   float time = mod(uTime, aLifetime);
 
   // We start by positioning our particle at the fire's position. We then
-  //
+  // multiply it's velocity by the amount of time elapsed to move it along
+  // it's trajectory
   vec4 position = vec4(uFirePos + aCenterOffset + (time * aVelocity), 1.0);
 
+  // Calculate a size for our particle. As it ages we make it smaller. I wrote
+  // this before I really understood what I was doing so the it's a little
+  // unclear.. but I don't want to tamper with it since I like the effect so
+  // *shrug*.
   vLifetime = 1.3 - (time / aLifetime);
   vLifetime = clamp(vLifetime, 0.0, 1.0);
-
   float size = (vLifetime * vLifetime) * 0.05;
 
+  // If we want to use billboarding we get the right and up world space vectors for
+  // our camera and use that to align our vertex so our particle faces the camera
   if (uUseBillboarding) {
     vec3 cameraRight = vec3(uViewMatrix[0].x, uViewMatrix[1].x, uViewMatrix[2].x);
     vec3 cameraUp = vec3(uViewMatrix[0].y, uViewMatrix[1].y, uViewMatrix[2].y);
 
     position.xyz += (cameraRight * aTriCorner.x * size) + (cameraUp * aTriCorner.y * size);
   } else {
+    // If billboarding is not enabled we align our vertex along the XY plane
     position.xy += aTriCorner.xy * size;
   }
 
+  // Position our vertex in clip space
   gl_Position = uPMatrix * uViewMatrix * position;
 
   vTextureCoords = aTextureCoords;
@@ -183,23 +191,32 @@ varying vec2 vTextureCoords;
 uniform sampler2D fireAtlas;
 
 void main (void) {
+  // So as I was learning I threw this in and I liked how it looked.
+  // This doesn't make much sense since we aren't even calculating a life
+  // percentage.. but I'll leave it. Sometimes you achieve effects that you like
+  // by accident *shrug*
   float time = mod(uTimeFrag, vLifetime);
-
   float percentOfLife = time / vLifetime;
   percentOfLife = clamp(percentOfLife, 0.0, 1.0);
+
+  // Ok so the first part of this fragment shader is bogus.. but let's move on. Here we
+  // decide which of the 16 textures in our texture atlas to use based on how far along
+  // in the particle's life we are. As it ages we move through the fire sprites in the
+  // atlas.
   float offset = floor(16.0 * percentOfLife);
-  // float offset = 16.0;
   float offsetX = floor(mod(offset, 4.0)) / 4.0;
   float offsetY = 0.75 - floor(offset / 4.0) / 4.0;
 
-  // vec4 texColor = texture2D(fireAtlas, vTextureCoords);
+  // Set the frag color to the fragment in the sprite within our texture atlas
   vec4 texColor = texture2D(fireAtlas, vec2((vTextureCoords.x / 4.0) + offsetX, (vTextureCoords.y / 4.0) + offsetY));
   gl_FragColor = uColor * texColor;
 
+  // Fade away the particle as it ages
   gl_FragColor.a *= vLifetime;
 }
 `
 
+// Initialize our vertex shader
 var vertexShader = gl.createShader(gl.VERTEX_SHADER)
 gl.shaderSource(vertexShader, vertexGLSL)
 gl.compileShader(vertexShader)
@@ -214,6 +231,7 @@ gl.attachShader(shaderProgram, fragmentShader)
 gl.linkProgram(shaderProgram)
 gl.useProgram(shaderProgram)
 
+// Enable all of our vertex attributes
 var lifetimeAttrib = gl.getAttribLocation(shaderProgram, 'aLifetime')
 var texCoordAttrib = gl.getAttribLocation(shaderProgram, 'aTextureCoords')
 var triCornerAttrib = gl.getAttribLocation(shaderProgram, 'aTriCorner')
@@ -225,6 +243,7 @@ gl.enableVertexAttribArray(triCornerAttrib)
 gl.enableVertexAttribArray(centerOffsetAttrib)
 gl.enableVertexAttribArray(velocityAttrib)
 
+// Get the location of all of our uniforms so that we can send data to the GPU
 var timeUni = gl.getUniformLocation(shaderProgram, 'uTime')
 var timeUniFrag = gl.getUniformLocation(shaderProgram, 'uTimeFrag')
 var firePosUni = gl.getUniformLocation(shaderProgram, 'uFirePos')
@@ -234,13 +253,17 @@ var colorUni = gl.getUniformLocation(shaderProgram, 'uColor')
 var fireAtlasUni = gl.getUniformLocation(shaderProgram, 'uFireAtlas')
 var useBillboardUni = gl.getUniformLocation(shaderProgram, 'uUseBillboarding')
 
+/**
+ * Section 4 - Setting up the data that we need to render our particles
+ */
+
+// Load our fire texture atlas
 var imageIsLoaded = false
 var fireTexture = gl.createTexture()
 var fireAtlas = new window.Image()
 fireAtlas.onload = function () {
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
   gl.bindTexture(gl.TEXTURE_2D, fireTexture)
-  // TODO: What do these even do?
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fireAtlas)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
@@ -248,6 +271,7 @@ fireAtlas.onload = function () {
 }
 fireAtlas.src = 'fire-texture-atlas.jpg'
 
+// Initialize the data for all of our particles
 var numParticles = 1000
 var lifetimes = []
 var triCorners = []
@@ -255,63 +279,97 @@ var texCoords = []
 var vertexIndices = []
 var centerOffsets = []
 var velocities = []
+
 var triCornersCycle = [
+  // Bottom left corner of the square
   -1.0, -1.0,
+  // Bottom right corner of the square
   1.0, -1.0,
+  // Top right corner of the square
   1.0, 1.0,
+  // Top left corner of the square
   -1.0, 1.0
 ]
 var texCoordsCycle = [
+  // Bottom left corner of the texture
   0, 0,
+  // Bottom right corner of the texture
   1, 0,
+  // Top right corner of the texture
   1, 1,
+  // Top left corner of the texture
   0, 1
 ]
 
 for (var i = 0; i < numParticles; i++) {
+  // Particles live for up to 8 seconds
   var lifetime = 8 * Math.random()
 
+  // Particles are placed within 0.25 units from the center of the flame
   var diameterAroundCenter = 0.5
   var halfDiameterAroundCenter = diameterAroundCenter / 2
 
+  // We randomly choose the x displacement from the center
   var xStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
   xStartOffset /= 3
+
+  // We randomly choose the y displacement from the center
   var yStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
   yStartOffset /= 10
+
+  // We randomly choose the z displacement from the center
   var zStartOffset = diameterAroundCenter * Math.random() - halfDiameterAroundCenter
   zStartOffset /= 3
 
+  // We randomly choose how fast the particle shoots up into the air
   var upVelocity = 0.1 * Math.random()
 
+  // We randomly choose how much the particle drifts to the left or right
   var xSideVelocity = 0.02 * Math.random()
   if (xStartOffset > 0) {
     xSideVelocity *= -1
   }
 
+  // We randomly choose how much the particle drifts to the front and back
   var zSideVelocity = 0.02 * Math.random()
   if (zStartOffset > 0) {
     zSideVelocity *= -1
   }
 
+  // Push the data for the four corners of the particle quad
   for (var j = 0; j < 4; j++) {
     lifetimes.push(lifetime)
+
     triCorners.push(triCornersCycle[j * 2])
     triCorners.push(triCornersCycle[j * 2 + 1])
+
     texCoords.push(texCoordsCycle[j * 2])
     texCoords.push(texCoordsCycle[j * 2 + 1])
     centerOffsets.push(xStartOffset)
+    // Particles that start farther from the fire's center start slightly
+    // higher. This gives the bottom of the fire a slight curve
     centerOffsets.push(yStartOffset + Math.abs(xStartOffset / 2.0))
     centerOffsets.push(zStartOffset)
+
     velocities.push(xSideVelocity)
     velocities.push(upVelocity)
     velocities.push(zSideVelocity)
   }
 
+  // Push the 6 vertices that will form our quad
+  // 3 for the first triangle and 3 for the second
   vertexIndices = vertexIndices.concat([
     0, 1, 2, 0, 2, 3
   ].map(function (num) { return num + 4 * i }))
 }
 
+// Push all of our particle attribute data to the GPU
+function createBuffer (bufferType, DataType, data) {
+  var buffer = gl.createBuffer()
+  gl.bindBuffer(gl[bufferType], buffer)
+  gl.bufferData(gl[bufferType], new DataType(data), gl.STATIC_DRAW)
+  return buffer
+}
 createBuffer('ARRAY_BUFFER', Float32Array, lifetimes)
 gl.vertexAttribPointer(lifetimeAttrib, 1, gl.FLOAT, false, 0, 0)
 
@@ -329,28 +387,28 @@ gl.vertexAttribPointer(velocityAttrib, 3, gl.FLOAT, false, 0, 0)
 
 createBuffer('ELEMENT_ARRAY_BUFFER', Uint16Array, vertexIndices)
 
-// Used to create a new WebGL buffer for pushing data to the GPU
-function createBuffer (bufferType, DataType, data) {
-  var buffer = gl.createBuffer()
-  gl.bindBuffer(gl[bufferType], buffer)
-  gl.bufferData(gl[bufferType], new DataType(data), gl.STATIC_DRAW)
-  return buffer
-}
-
+// We set OpenGL's blend function so that we don't see the black background
+// on our particle squares. Essentially, if there is anything behind the particle
+// we show whatever is behind it plus the color of the particle.
+//
+// If the color of the particle is black then black is (0, 0, 0) so we only show
+// whatever is behind it.
+// So this works because our texture has a black background.
+// There are many different blend functions that you can use, this one works for our
+// purposes.
 gl.enable(gl.BLEND)
-gl.blendFunc(gl.SRC_ALPHA, gl.ONE)
+gl.blendFunc(gl.ONE, gl.ONE)
 
+// Push our fire texture atlas to the GPU
 gl.activeTexture(gl.TEXTURE0)
 gl.bindTexture(gl.TEXTURE_2D, fireTexture)
 gl.uniform1i(fireAtlasUni, 0)
 
-gl.uniform1f(timeUni, 0.1)
-gl.uniform1f(timeUniFrag, 0.1)
-
+// Send our perspective matrix to the GPU
 gl.uniformMatrix4fv(perspectiveUni, false, glMat4.perspective([], Math.PI / 3, 1, 0.01, 1000))
 
 /**
- * Section 4 - Creating our camera's view matrix
+ * Section 5 - Creating our camera's view matrix
  */
 
 function createCamera () {
@@ -377,7 +435,7 @@ function createCamera () {
 }
 
 /**
- * Section 5 - Drawing our particles
+ * Section 6 - Drawing our particles
  */
 var previousTime = new Date().getTime()
 

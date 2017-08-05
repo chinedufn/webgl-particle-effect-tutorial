@@ -4,6 +4,7 @@
   "description": "A tutorial for creating a WebGL fire particle effect",
   "main": "tutorial.js",
   "scripts": {
+    "start": "budo tutorial.js --open --live",
     "test": "standard"
   },
   "repository": {

@@ -2,7 +2,7 @@
 
 ## To read the tutorial
 
-http://chinedufn.com/webgl-particle-effect-tutorial/
+http://www.chinedufn.com/webgl-particle-effect-billboard-tutorial/
 
 ## To run locally
 
